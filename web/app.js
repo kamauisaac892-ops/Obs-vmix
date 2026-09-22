@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-const state={
+const state={mediaItems:[],
   program:"camera1",preview:"camera2",programSource:null,previewSource:null,
   programStream:null,previewStream:null,live:false,recording:false,recorder:null,chunks:[],
   transition:"CUT",format:"16:9",sources:new Map(),graphics:new Map(),ticker:""
@@ -42,11 +42,11 @@ function attachVideo(which,stream){
   v.style.display=stream?"block":"none";
   $(which==="program"?"programPlaceholder":"previewPlaceholder").style.display=stream?"none":"flex";
 }
-function attachUrl(which,url){
+function currentMediaVideo(){return $("programVideo").style.display!=="none" && state.programSource?.kind==="media"?$("programVideo"):$("previewVideo")}\nfunction updateMediaControls(){const v=currentMediaVideo();if(!v||!v.src){$("playPauseBtn").textContent="▶ Play";$("mediaTime").textContent="00:00 / 00:00";return}$("playPauseBtn").textContent=v.paused?"▶ Play":"❚❚ Pause";const fmt=x=>{if(!isFinite(x))return "00:00";return String(Math.floor(x/60)).padStart(2,"0")+":"+String(Math.floor(x%60)).padStart(2,"0")};$("mediaTime").textContent=fmt(v.currentTime)+" / "+fmt(v.duration);$("mediaVolume").value=Math.round(v.volume*100)}\nfunction attachUrl(which,url){
   const v=$(which==="program"?"programVideo":"previewVideo");
-  stopStream(v.srcObject);v.srcObject=null;v.src=url;v.loop=false;v.muted=true;v.controls=false;v.style.display="block";
+  stopStream(v.srcObject);v.srcObject=null;v.src=url;v.loop=false;v.muted=true;v.controls=false;v.preload="auto";v.style.display="block";v.onplay=updateMediaControls;v.onpause=updateMediaControls;v.ontimeupdate=updateMediaControls;v.onloadedmetadata=updateMediaControls;v.onerror=()=>toast("This link cannot be played by the browser. Use a direct MP4/WebM URL.");
   $(which==="program"?"programPlaceholder":"previewPlaceholder").style.display="none";
-  v.play().catch(()=>toast("Press play in the browser if autoplay is blocked"));
+  updateMediaControls();
 }
 function attachImage(which,url){
   const img=$(which==="program"?"programImage":"previewImage");
@@ -123,10 +123,10 @@ function render(){
     $("sceneGrid").appendChild(b)
   });
 }
-async function addMedia(){
+async function renderMediaList(){const list=$("mediaList");list.innerHTML="";state.mediaItems.forEach(item=>{const row=document.createElement("div");row.className="media-item";row.innerHTML="<span class=\"media-name\">"+item.name+"</span><span class=\"media-kind\">"+item.kind+"</span><button>Preview</button><button class=\"media-play\">▶</button><button class=\"media-delete\">×</button>";row.querySelector("button").onclick=()=>previewSource(item.id);row.querySelector(".media-play").onclick=()=>{state.preview=item.id;state.previewSource=item;attachUrl("preview",item.url);$("previewVideo").play().catch(()=>{});render();updateMediaControls()};row.querySelector(".media-delete").onclick=()=>{state.sources.delete(item.id);state.mediaItems=state.mediaItems.filter(x=>x.id!==item.id);renderMediaList();toast("Media removed")};list.appendChild(row)})}\nfunction addMedia(){
   const url=$("mediaUrl").value.trim();if(!url)return toast("Paste a video URL first");
   const id="media-"+Date.now();
-  state.sources.set(id,{id,name:"Media "+(state.sources.size+1),kind:"media",url});
+  const item={id,name:"Media "+(state.mediaItems.length+1),kind:"media",url};state.mediaItems.push(item);state.sources.set(id,item);
   state.sources.set("media",{id:"media",name:"Media",kind:"media",url});
   state.preview="media";state.previewSource=state.sources.get("media");
   attachUrl("preview",url);render();toast("Media added to Preview");
@@ -197,14 +197,14 @@ $("addSceneBtn").onclick=()=>{
 document.querySelectorAll(".source-card").forEach(b=>b.onclick=()=>previewSource(b.dataset.source));
 $("cameraBtn").onclick=()=>previewSource("camera1");
 $("screenBtn").onclick=()=>previewSource("screen");
-$("addMediaBtn").onclick=addMedia;
-$("addImageBtn").onclick=()=>addImage($("imageUrl").value.trim());
+$("addMediaBtn").onclick=addMedia;\n$("videoFile").onchange=e=>{const f=e.target.files[0];if(!f)return;const id="local-video-"+Date.now(),item={id,name:f.name,kind:"media",url:URL.createObjectURL(f)};state.mediaItems.push(item);state.sources.set(id,item);state.preview=id;state.previewSource=item;renderMediaList();attachUrl("preview",item.url);render();toast("Local video added")};
+$("addImageBtn").onclick=()=>$("imageFile").click();
 $("imageFile").onchange=e=>{const f=e.target.files[0];if(f)addImage(URL.createObjectURL(f))};
-$("addGraphicBtn").onclick=addGraphic;$("tickerBtn").onclick=addTicker;
+$("addGraphicBtn").onclick=addGraphic;$("tickerBtn").onclick=addTicker;\n$("playPauseBtn").onclick=()=>{const v=currentMediaVideo();if(!v?.src)return toast("Select a video first");if(v.paused)v.play().catch(()=>toast("The browser blocked playback"));else v.pause();updateMediaControls()};\n$("stopMediaBtn").onclick=()=>{const v=currentMediaVideo();if(v?.src){v.pause();v.currentTime=0;updateMediaControls()}};\n$("restartMediaBtn").onclick=()=>{const v=currentMediaVideo();if(v?.src){v.currentTime=0;v.play().catch(()=>{});updateMediaControls()}};\n$("mediaVolume").oninput=e=>{const v=currentMediaVideo();if(v)v.volume=Number(e.target.value)/100};
 $("formatSelect").onchange=e=>{state.format=e.target.value;render()};
 document.querySelectorAll("[data-mute]").forEach(b=>b.onclick=()=>{
   b.classList.toggle("muted");b.textContent=b.classList.contains("muted")?"U":"M";toast(b.dataset.mute.toUpperCase()+(b.classList.contains("muted")?" muted":" unmuted"))
 });
 setInterval(()=>["micMeter","programMeter","mediaMeter","masterMeter"].forEach(id=>$(id).style.width=(35+Math.random()*55)+"%"),500);
 setInterval(()=>{const n=new Date();$("programClock").textContent=[n.getHours(),n.getMinutes(),n.getSeconds()].map(x=>String(x).padStart(2,"0")).join(":")},1000);
-render();previewSource("camera2");
+render();renderMediaList();previewSource("camera2");
