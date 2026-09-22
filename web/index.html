@@ -15,7 +15,7 @@
   <section class="stage">
     <div class="stage-head"><span>PROGRAM</span><span id="programLabel">Camera 1</span><span class="onair">ON AIR</span></div>
     <div class="program-frame" id="programFrame">
-      <video id="programVideo" autoplay playsinline muted></video>
+      <canvas id="programCanvas" width="1920" height="1080"></canvas><video id="programVideo" autoplay playsinline muted hidden></video>
       <img id="programImage" alt="" hidden>
       <div id="programGraphic" class="broadcast-graphic" hidden><strong id="programGraphicName">LOWER THIRD</strong><span id="programGraphicRole"></span></div>
       <div id="programPlaceholder" class="placeholder"><b>PROGRAM</b><span>Add a source from the panel</span></div>
@@ -27,7 +27,7 @@
   <section class="stage preview-stage">
     <div class="stage-head"><span>PREVIEW</span><span id="previewLabel">Camera 2</span><span class="preview-badge">NEXT</span></div>
     <div class="program-frame preview-frame">
-      <video id="previewVideo" autoplay playsinline muted></video>
+      <canvas id="previewCanvas" width="1920" height="1080"></canvas><video id="previewVideo" autoplay playsinline muted hidden></video>
       <img id="previewImage" alt="" hidden>
       <div id="previewGraphic" class="broadcast-graphic" hidden><strong id="previewGraphicName">LOWER THIRD</strong><span id="previewGraphicRole"></span></div>
       <div id="previewPlaceholder" class="placeholder"><b>PREVIEW</b><span>Choose the next source</span></div>
@@ -57,7 +57,7 @@
   </section>
 
   <section class="source-tools">
-    <div class="section-title">SOURCE TOOLBOX</div>
+    <div class="section-title">SOURCE TOOLBOX / INPUTS</div>
     <div class="tool-grid">
       <div class="tool-card"><b>🎥 Camera</b><span>Use front/rear camera and microphone.</span><button id="cameraBtn">Start camera</button></div>
       <div class="tool-card"><b>🖥 Screen share</b><span>Share a tab, window or full display.</span><button id="screenBtn">Share screen</button></div>
