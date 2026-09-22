@@ -1,1 +1,83 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Our Production Studio</title><link rel="stylesheet" href="/styles.css"></head><body><header class="topbar"><div class="brand"><span class="brand-mark">OPS</span><div><strong>Our Production Studio</strong><small>Live production console</small></div></div><div class="top-status"><span id="connectionDot" class="dot"></span><span id="connectionText">Local studio</span><span class="pill">16:9</span></div><div class="top-actions"><button id="recordBtn" class="danger">● Record</button><button id="goLiveBtn" class="live">GO LIVE</button></div></header><main class="workspace"><section class="stage"><div class="stage-head"><span>PROGRAM</span><span id="programLabel">Camera 1</span><span class="onair">ON AIR</span></div><div class="program-frame" id="programFrame"><video id="programVideo" autoplay playsinline muted></video><div id="programPlaceholder" class="placeholder"><b>PROGRAM</b><span>Select a live camera or source</span></div><div class="safe-area"></div></div><div class="program-meta"><span id="programSource">Camera 1</span><span id="programClock">00:00:00</span></div></section><section class="stage preview-stage"><div class="stage-head"><span>PREVIEW</span><span id="previewLabel">Camera 2</span><span class="preview-badge">NEXT</span></div><div class="program-frame preview-frame"><video id="previewVideo" autoplay playsinline muted></video><div id="previewPlaceholder" class="placeholder"><b>PREVIEW</b><span>Choose the next scene</span></div></div><div class="program-meta"><span id="previewSource">Camera 2</span><span id="transitionStatus">CUT</span></div></section><aside class="side-panel"><div class="panel-title">SOURCES</div><button class="source-card active" data-source="camera1"><span class="source-icon">◉</span><span><b>Camera 1</b><small>Rear camera</small></span></button><button class="source-card" data-source="camera2"><span class="source-icon">◎</span><span><b>Camera 2</b><small>Front camera</small></span></button><button class="source-card" data-source="screen"><span class="source-icon">▣</span><span><b>Screen</b><small>Share a window/screen</small></span></button><button class="source-card" data-source="graphic"><span class="source-icon">T</span><span><b>Graphics</b><small>Lower third / title</small></span></button><div class="side-divider"></div><div class="panel-title">OUTPUT</div><div class="output-row"><span>Format</span><strong>1920 × 1080</strong></div><div class="output-row"><span>Frame rate</span><strong>30 fps</strong></div><div class="output-row"><span>Stream</span><strong id="streamState">Offline</strong></div></aside><section class="controls"><div class="section-title">SCENES</div><div class="scene-grid" id="sceneGrid"></div><div class="take-row"><button id="takeBtn" class="take">TAKE</button><button id="fadeBtn" class="fade">FADE</button><button id="swapBtn" class="secondary">SWAP</button><button id="addSceneBtn" class="secondary">+ Scene</button></div></section><section class="mixer"><div class="section-title">AUDIO MIXER</div><div class="mixer-grid"><div class="channel"><div class="channel-head"><b>MIC</b><button data-mute="mic">M</button></div><div class="meter"><i id="micMeter"></i></div><input type="range" min="0" max="100" value="75"><small>Microphone</small></div><div class="channel"><div class="channel-head"><b>PROGRAM</b><button data-mute="program">M</button></div><div class="meter"><i id="programMeter"></i></div><input type="range" min="0" max="100" value="80"><small>Program mix</small></div><div class="channel"><div class="channel-head"><b>MEDIA</b><button data-mute="media">M</button></div><div class="meter"><i id="mediaMeter"></i></div><input type="range" min="0" max="100" value="60"><small>Media</small></div><div class="channel master"><div class="channel-head"><b>MASTER</b><span class="level">-6 dB</span></div><div class="meter tall"><i id="masterMeter"></i></div><input type="range" min="0" max="100" value="82"><small>Program output</small></div></div></section></main><div id="toast" class="toast"></div><script src="/app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Our Production Studio</title><link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">OPS</span><div><strong>Our Production Studio</strong><small>Live production console</small></div></div>
+  <div class="top-status"><span id="connectionDot" class="dot"></span><span id="connectionText">Ready</span><span class="pill" id="formatPill">16:9</span></div>
+  <div class="top-actions"><button id="recordBtn" class="danger">● Record</button><button id="goLiveBtn" class="live">GO LIVE</button></div>
+</header>
+
+<main class="workspace">
+  <section class="stage">
+    <div class="stage-head"><span>PROGRAM</span><span id="programLabel">Camera 1</span><span class="onair">ON AIR</span></div>
+    <div class="program-frame" id="programFrame">
+      <video id="programVideo" autoplay playsinline muted></video>
+      <img id="programImage" alt="" hidden>
+      <div id="programGraphic" class="broadcast-graphic" hidden><strong id="programGraphicName">LOWER THIRD</strong><span id="programGraphicRole"></span></div>
+      <div id="programPlaceholder" class="placeholder"><b>PROGRAM</b><span>Add a source from the panel</span></div>
+      <div class="safe-area"></div>
+    </div>
+    <div class="program-meta"><span id="programSource">Camera 1</span><span id="programClock">00:00:00</span></div>
+  </section>
+
+  <section class="stage preview-stage">
+    <div class="stage-head"><span>PREVIEW</span><span id="previewLabel">Camera 2</span><span class="preview-badge">NEXT</span></div>
+    <div class="program-frame preview-frame">
+      <video id="previewVideo" autoplay playsinline muted></video>
+      <img id="previewImage" alt="" hidden>
+      <div id="previewGraphic" class="broadcast-graphic" hidden><strong id="previewGraphicName">LOWER THIRD</strong><span id="previewGraphicRole"></span></div>
+      <div id="previewPlaceholder" class="placeholder"><b>PREVIEW</b><span>Choose the next source</span></div>
+    </div>
+    <div class="program-meta"><span id="previewSource">Camera 2</span><span id="transitionStatus">CUT</span></div>
+  </section>
+
+  <aside class="side-panel">
+    <div class="panel-title">SOURCES</div>
+    <button class="source-card active" data-source="camera1"><span class="source-icon">◉</span><span><b>Camera 1</b><small>Rear camera</small></span></button>
+    <button class="source-card" data-source="camera2"><span class="source-icon">◎</span><span><b>Camera 2</b><small>Front camera</small></span></button>
+    <button class="source-card" data-source="screen"><span class="source-icon">▣</span><span><b>Screen share</b><small>Window / tab / display</small></span></button>
+    <button class="source-card" data-source="media"><span class="source-icon">▶</span><span><b>Media URL</b><small>Play a video or audio link</small></span></button>
+    <button class="source-card" data-source="image"><span class="source-icon">▧</span><span><b>Image</b><small>Poster / logo / photo</small></span></button>
+    <button class="source-card" data-source="graphic"><span class="source-icon">T</span><span><b>Lower third</b><small>Name / title / ticker</small></span></button>
+    <div class="side-divider"></div>
+    <div class="panel-title">OUTPUT</div>
+    <div class="output-row"><span>Format</span><select id="formatSelect"><option value="16:9">1920 × 1080</option><option value="9:16">1080 × 1920</option><option value="1:1">1080 × 1080</option></select></div>
+    <div class="output-row"><span>Frame rate</span><strong>30 fps</strong></div>
+    <div class="output-row"><span>Stream</span><strong id="streamState">Offline</strong></div>
+  </aside>
+
+  <section class="controls">
+    <div class="section-title">SCENES</div>
+    <div class="scene-grid" id="sceneGrid"></div>
+    <div class="take-row"><button id="takeBtn" class="take">TAKE</button><button id="fadeBtn" class="fade">FADE</button><button id="swapBtn" class="secondary">SWAP</button><button id="addSceneBtn" class="secondary">+ Scene</button></div>
+  </section>
+
+  <section class="source-tools">
+    <div class="section-title">SOURCE TOOLBOX</div>
+    <div class="tool-grid">
+      <div class="tool-card"><b>🎥 Camera</b><span>Use front/rear camera and microphone.</span><button id="cameraBtn">Start camera</button></div>
+      <div class="tool-card"><b>🖥 Screen share</b><span>Share a tab, window or full display.</span><button id="screenBtn">Share screen</button></div>
+      <div class="tool-card"><b>🔗 Video / media URL</b><span>Paste a direct MP4/WebM/M3U8-compatible URL.</span><div class="inline"><input id="mediaUrl" placeholder="https://example.com/video.mp4"><button id="addMediaBtn">Add</button></div></div>
+      <div class="tool-card"><b>🖼 Image</b><span>Load a remote image or choose a local file.</span><div class="inline"><input id="imageUrl" placeholder="https://example.com/logo.png"><button id="addImageBtn">Add</button></div><label class="file-btn">Choose file<input id="imageFile" type="file" accept="image/*"></label></div>
+      <div class="tool-card"><b>🏷 Lower third</b><span>Create broadcast names, titles and captions.</span><div class="form-grid"><input id="lowerName" placeholder="Name"><input id="lowerRole" placeholder="Title / role"><input id="lowerColor" type="color" value="#16c784"><button id="addGraphicBtn">Create graphic</button></div></div>
+      <div class="tool-card"><b>📜 Ticker</b><span>Scrolling text for the program output.</span><div class="inline"><input id="tickerText" placeholder="Breaking news • Your message"><button id="tickerBtn">Add ticker</button></div></div>
+    </div>
+  </section>
+
+  <section class="mixer">
+    <div class="section-title">AUDIO MIXER</div>
+    <div class="mixer-grid">
+      <div class="channel"><div class="channel-head"><b>MIC</b><button data-mute="mic">M</button></div><div class="meter"><i id="micMeter"></i></div><input id="micGain" type="range" min="0" max="100" value="75"><small>Microphone</small></div>
+      <div class="channel"><div class="channel-head"><b>PROGRAM</b><button data-mute="program">M</button></div><div class="meter"><i id="programMeter"></i></div><input type="range" min="0" max="100" value="80"><small>Program mix</small></div>
+      <div class="channel"><div class="channel-head"><b>MEDIA</b><button data-mute="media">M</button></div><div class="meter"><i id="mediaMeter"></i></div><input id="mediaGain" type="range" min="0" max="100" value="60"><small>Media</small></div>
+      <div class="channel master"><div class="channel-head"><b>MASTER</b><span class="level">-6 dB</span></div><div class="meter tall"><i id="masterMeter"></i></div><input type="range" min="0" max="100" value="82"><small>Program output</small></div>
+    </div>
+  </section>
+</main>
+<div id="toast" class="toast"></div>
+<script src="/app.js"></script>
+</body></html>
