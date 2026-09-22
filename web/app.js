@@ -73,8 +73,7 @@ async function drawLayer(ctx,layer){
     const v=sourceVideos.get(item.id);if(!v)return;
     if(v.readyState>=2){ctx.drawImage(v,x,y,w,h)}
   }else if(item.kind==="embed"){
-    const f=makeEmbed(item);
-    if(f){ctx.fillStyle="#05070a";ctx.fillRect(x,y,w,h);ctx.save();ctx.translate(x,y);ctx.scale(w/f.width,h/f.height);ctx.drawImage(f,0,0);ctx.restore()}
+    // Cross-origin embeds cannot be rasterized into canvas. They are rendered as iframe overlays by renderEmbedOverlay().
   }else if(item.kind==="image"){const img=ensureImage(item);if(img.complete&&img.naturalWidth)ctx.drawImage(img,x,y,w,h)}
   else if(item.kind==="graphic"){ctx.fillStyle="#070a10e8";ctx.fillRect(x,y,w,h);ctx.fillStyle=item.graphic?.color||"#16c784";ctx.fillRect(x,y,5,h);ctx.fillStyle="#fff";ctx.font="700 38px system-ui";ctx.fillText(item.graphic?.name||"Lower Third",x+22,y+55);ctx.fillStyle="#b9c4d2";ctx.font="22px system-ui";ctx.fillText(item.graphic?.role||"",x+22,y+88)}
   else if(item.kind==="text"){ctx.fillStyle="#ffffff";ctx.font="700 42px system-ui";ctx.fillText(item.text||"Text",x,y+50)}
@@ -86,7 +85,7 @@ async function renderCanvas(which,sceneId){
   for(const layer of s.layers)await drawLayer(ctx,layer);
   if(which==="program"&&state.ticker){ctx.fillStyle="#0b0e13ee";ctx.fillRect(0,ctx.canvas.height-46,ctx.canvas.width,46);ctx.fillStyle="#fff";ctx.font="700 24px system-ui";ctx.fillText(state.ticker,24,ctx.canvas.height-15)}
 }
-async function render(){await renderCanvas("program",state.programScene);await renderCanvas("preview",state.previewScene);updateLabels();renderScenes();renderLayers()}
+async function render(){await renderCanvas("program",state.programScene);await renderCanvas("preview",state.previewScene);renderEmbedOverlay("program",state.programScene);renderEmbedOverlay("preview",state.previewScene);updateLabels();renderScenes();renderLayers()}
 function updateLabels(){
   $("programLabel").textContent=sceneName(state.programScene);$("programSource").textContent=sceneName(state.programScene);
   $("previewLabel").textContent=sceneName(state.previewScene);$("previewSource").textContent=sceneName(state.previewScene);
@@ -134,6 +133,20 @@ function addImage(url){if(!url)return toast("Choose an image first");const id="i
 function addGraphic(){const g={name:$("lowerName").value.trim()||"Our Production Studio",role:$("lowerRole").value.trim()||"Live",color:$("lowerColor").value};const item={id:"graphic",name:"Lower Third",kind:"graphic",graphic:g};state.sources.set("graphic",item);selectedScene().layers.push({id:"layer-"+Date.now(),source:"graphic",x:.04,y:.75,w:.7,h:.18,opacity:1,visible:true});render();toast("Lower third added to selected scene")}
 function addTicker(){state.ticker=$("tickerText").value.trim();render();toast(state.ticker?"Ticker added":"Ticker removed")}
 function renderMediaList(){const list=$("mediaList");list.innerHTML="";state.mediaItems.forEach(item=>{const row=document.createElement("div");row.className="media-item";row.innerHTML="<span class='media-name'>"+item.name+"</span><span class='media-kind'>"+providerLabel(item).toUpperCase()+"</span><button class='prev'>Preview</button><button class='play'>▶</button><button class='del'>×</button>";row.querySelector(".prev").onclick=()=>{state.sources.set(item.id,item);selectedScene().layers.push({id:"layer-"+Date.now(),source:item.id,x:0,y:0,w:1,h:1,opacity:1,visible:true});state.previewScene=state.selectedScene;render()};row.querySelector(".play").onclick=()=>{if(isEmbed(item)){const f=makeEmbed(item);f?.contentWindow?.postMessage(JSON.stringify({event:"command",func:"playVideo",args:[]}),"*");}else{const v=ensureMediaElement(item);v.play().catch(()=>toast("Playback was blocked or the URL is not playable"));}};row.querySelector(".del").onclick=()=>{state.mediaItems=state.mediaItems.filter(x=>x.id!==item.id);state.sources.delete(item.id);renderMediaList();render()};list.appendChild(row)})}
+function renderEmbedOverlay(which,sceneId){
+  const frame=$(which==="program"?"programFrame":"previewFrame");
+  const iframe=$(which==="program"?"programEmbed":"previewEmbed");
+  const scene=currentScene(sceneId);
+  const layer=scene?.layers.find(l=>{const x=state.sources.get(l.source);return l.visible&&x?.kind==="embed"});
+  if(!layer){iframe.hidden=true;iframe.removeAttribute("src");return}
+  const item=state.sources.get(layer.source);const src=embedUrl(item);if(!src){iframe.hidden=true;return}
+  if(iframe.src!==src)iframe.src=src;
+  iframe.hidden=false;
+  iframe.style.left=(layer.x*100)+"%";iframe.style.top=(layer.y*100)+"%";
+  iframe.style.width=(layer.w*100)+"%";iframe.style.height=(layer.h*100)+"%";
+  iframe.style.opacity=layer.opacity??1;
+  iframe.style.zIndex="10";
+}
 function currentPreviewMedia(){const s=currentScene(state.previewScene);const l=s?.layers.find(x=>x.source.startsWith("media-"));const item=l?state.sources.get(l.source):null;return item||null}
 function controlPreviewMedia(action){const item=currentPreviewMedia();if(!item)return toast("Select a media layer first");if(item.kind==="embed"){const f=makeEmbed(item);const func=action==="play"?"playVideo":action==="pause"?"pauseVideo":"stopVideo";f?.contentWindow?.postMessage(JSON.stringify({event:"command",func,args:[]}),"*");return}const v=ensureMediaElement(item);if(action==="play")v.play().catch(()=>toast("Playback blocked or URL invalid"));if(action==="pause")v.pause();if(action==="stop"){v.pause();v.currentTime=0}}
 function programRecordStream(){return canvases.program.captureStream(30)}
