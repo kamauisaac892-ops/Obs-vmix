@@ -133,7 +133,17 @@ function addMedia(){
   const provider=providerFromUrl(url);if(provider==="invalid")return toast("Enter a valid URL");
   const id="media-"+Date.now(),item={id,name:(provider==="direct"?"Media ":"")+(state.mediaItems.length+1),kind:provider==="direct"?"media":"embed",provider,url};
   if(provider!=="direct"&&!embedUrl(item))return toast("This link format is not supported");
-  state.mediaItems.push(item);state.sources.set(id,item);renderMediaList();toast(provider==="direct"?"Media added":"Embedded "+providerLabel(item)+" source added");render()
+  state.mediaItems.push(item);state.sources.set(id,item);
+  const s=selectedScene();
+  if(s){
+    s.layers.push({id:"layer-"+Date.now(),source:id,x:0,y:0,w:1,h:1,opacity:1,visible:true});
+    state.previewScene=s.id;
+    state.selectedScene=s.id;
+  }
+  renderMediaList();
+  persist();
+  toast(provider==="direct"?"Media added to Preview":"Embedded "+providerLabel(item)+" added to Preview");
+  render()
 }
 function addImage(url){if(!url)return toast("Choose an image first");const id="image-"+Date.now(),item={id,name:"Image",kind:"image",url};state.sources.set(id,item);state.selectedScene=state.previewScene;state.sources.set("image",item);render();toast("Image added")}
 function addGraphic(){const g={name:$("lowerName").value.trim()||"Our Production Studio",role:$("lowerRole").value.trim()||"Live",color:$("lowerColor").value};const item={id:"graphic",name:"Lower Third",kind:"graphic",graphic:g};state.sources.set("graphic",item);selectedScene().layers.push({id:"layer-"+Date.now(),source:"graphic",x:.04,y:.75,w:.7,h:.18,opacity:1,visible:true});render();toast("Lower third added to selected scene")}
