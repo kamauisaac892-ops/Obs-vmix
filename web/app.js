@@ -1,196 +1,34 @@
 const $=id=>document.getElementById(id);
-
-const state={
-  format:"16:9",live:false,recording:false,recorder:null,chunks:[],transition:"CUT",
-  scenes:[
-    {id:"scene-1",name:"Camera 1",layers:[{id:"l1",source:"camera1",x:0,y:0,w:1,h:1,opacity:1,visible:true}]},
-    {id:"scene-2",name:"Camera 2",layers:[{id:"l2",source:"camera2",x:0,y:0,w:1,h:1,opacity:1,visible:true}]},
-    {id:"scene-3",name:"Interview",layers:[{id:"l3",source:"camera1",x:0,y:0,w:.68,h:1,opacity:1,visible:true},{id:"l4",source:"camera2",x:.68,y:.12,w:.32,h:.88,opacity:1,visible:true}]},
-    {id:"scene-4",name:"Screen + Cam",layers:[{id:"l5",source:"screen",x:0,y:0,w:1,h:1,opacity:1,visible:true},{id:"l6",source:"camera1",x:.72,y:.7,w:.26,h:.26,opacity:1,visible:true}]},
-    {id:"scene-5",name:"Media",layers:[{id:"l7",source:"media",x:0,y:0,w:1,h:1,opacity:1,visible:true}]}
-  ],
-  selectedScene:"scene-1",programScene:"scene-1",previewScene:"scene-2",
-  sources:new Map(),mediaItems:[],graphics:new Map(),ticker:"",streams:{}
-};
-
-const W=1920,H=1080;
-const canvases={program:$("programCanvas"),preview:$("previewCanvas")};
-const ctxs={program:canvases.program.getContext("2d"),preview:canvases.preview.getContext("2d")};
-const sourceVideos=new Map(),sourceImages=new Map(),sourceEmbeds=new Map();
-function providerFromUrl(raw){try{const u=new URL(raw);const h=u.hostname.replace(/^www\\./,"").replace(/^m\\./,"");if(h==="youtube.com"||h==="youtu.be"||h==="youtube-nocookie.com")return "youtube";if(h==="vimeo.com"||h==="player.vimeo.com")return "vimeo";return "direct"}catch{return "invalid"}}
-function youtubeId(raw){try{const u=new URL(raw);if(u.hostname.includes("youtu.be"))return u.pathname.slice(1).split("/")[0];if(u.pathname.includes("/shorts/"))return u.pathname.split("/shorts/")[1].split("/")[0];if(u.pathname.includes("/embed/"))return u.pathname.split("/embed/")[1].split("/")[0];return u.searchParams.get("v")}catch{return null}}
-function vimeoId(raw){try{const u=new URL(raw);const m=u.pathname.match(/(?:video\\/)?(\\d+)/);return m?.[1]||null}catch{return null}}
-function isEmbed(item){return item?.kind==="embed"}
-function embedUrl(item){if(item.provider==="youtube"){const id=youtubeId(item.url);return id?`https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?enablejsapi=1&playsinline=1&controls=1&rel=0`:null}if(item.provider==="vimeo"){const id=vimeoId(item.url);return id?`https://player.vimeo.com/video/${encodeURIComponent(id)}?autoplay=0&title=0&byline=0&portrait=0`:null}return null}
-function makeEmbed(item){let f=sourceEmbeds.get(item.id);if(f)return f;const src=embedUrl(item);if(!src)return null;f=document.createElement("iframe");f.src=src;f.allow="autoplay; fullscreen; picture-in-picture; encrypted-media";f.allowFullscreen=true;f.loading="eager";f.style.position="fixed";f.style.left="-10000px";f.style.top="-10000px";f.style.width="640px";f.style.height="360px";document.body.appendChild(f);sourceEmbeds.set(item.id,f);return f}
-function providerLabel(item){return item.provider==="youtube"?"YouTube":item.provider==="vimeo"?"Vimeo":"Direct media"}
-
-function toast(m){const e=$("toast");e.textContent=m;e.classList.add("show");clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>e.classList.remove("show"),2200)}
-function currentScene(id){return state.scenes.find(s=>s.id===id)}
-function sceneName(id){return currentScene(id)?.name||id}
-function selectedScene(){return currentScene(state.selectedScene)||state.scenes[0]}
-function fmtTime(x){if(!isFinite(x))return"00:00";return String(Math.floor(x/60)).padStart(2,"0")+":"+String(Math.floor(x%60)).padStart(2,"0")}
-function setFormatCanvas(){const [a,b]=state.format.split(":").map(Number);const ratio=a/b;const cw=ratio>=1?1920:1080,ch=ratio>=1?1080:1920;for(const c of Object.values(canvases)){c.width=cw;c.height=ch}render()}
-function showGraphic(which,g){const box=$(which==="program"?"programGraphic":"previewGraphic"),n=$(which==="program"?"programGraphicName":"previewGraphicName"),r=$(which==="program"?"programGraphicRole":"previewGraphicRole");if(!g){box.hidden=true;return}n.textContent=g.name||"";r.textContent=g.role||"";box.style.setProperty("--accent",g.color||"#16c784");box.hidden=false}
-function stopStream(s){s?.getTracks?.().forEach(t=>t.stop())}
-
-async function captureSource(source){
-  if(state.sources.has(source)&&state.sources.get(source).kind==="stream")return state.sources.get(source);
-  try{
-    let stream;
-    if(source==="screen")stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
-    else if(source==="camera1"||source==="camera2")stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:source==="camera1"?"environment":"user",width:{ideal:1920},height:{ideal:1080}},audio:true});
-    else return state.sources.get(source)||null;
-    const item={id:source,name:source==="screen"?"Screen share":source==="camera1"?"Camera 1":"Camera 2",kind:"stream",stream};
-    state.sources.set(source,item);state.streams[source]=stream;
-    const v=document.createElement("video");v.autoplay=true;v.playsInline=true;v.muted=true;v.srcObject=stream;await v.play().catch(()=>{});sourceVideos.set(source,v);
-    stream.getVideoTracks()[0]?.addEventListener("ended",()=>{state.sources.delete(source);sourceVideos.delete(source);render()});
-    return item;
-  }catch(e){toast("Camera/screen permission was not available");return null}
-}
-
-function ensureMediaElement(item){
-  let v=sourceVideos.get(item.id);
-  if(v)return v;
-  v=document.createElement("video");v.autoplay=false;v.playsInline=true;v.controls=false;v.preload="auto";v.muted=false;v.src=item.url;
-  v.onerror=()=>toast("Media link cannot be played. Use a direct MP4/WebM URL or a supported stream URL.");
-  sourceVideos.set(item.id,v);return v;
-}
-function ensureImage(item){let img=sourceImages.get(item.id);if(img)return img;img=new Image();img.onload=render;img.src=item.url;sourceImages.set(item.id,img);return img}
-
-async function ensureLayerSource(source){
-  if(source==="camera1"||source==="camera2"||source==="screen")return captureSource(source);
-  return state.sources.get(source)||null;
-}
-
-async function drawLayer(ctx,layer){
-  if(!layer.visible)return;
-  const item=await ensureLayerSource(layer.source);
-  if(!item)return;
-  const cw=ctx.canvas.width,ch=ctx.canvas.height,x=layer.x*cw,y=layer.y*ch,w=layer.w*cw,h=layer.h*ch;
-  ctx.save();ctx.globalAlpha=layer.opacity??1;
-  if(item.kind==="stream"||item.kind==="media"){
-    const v=sourceVideos.get(item.id);if(!v)return;
-    if(v.readyState>=2){ctx.drawImage(v,x,y,w,h)}
-  }else if(item.kind==="embed"){
-    // Cross-origin embeds cannot be rasterized into canvas. They are rendered as iframe overlays by renderEmbedOverlay().
-  }else if(item.kind==="image"){const img=ensureImage(item);if(img.complete&&img.naturalWidth)ctx.drawImage(img,x,y,w,h)}
-  else if(item.kind==="graphic"){ctx.fillStyle="#070a10e8";ctx.fillRect(x,y,w,h);ctx.fillStyle=item.graphic?.color||"#16c784";ctx.fillRect(x,y,5,h);ctx.fillStyle="#fff";ctx.font="700 38px system-ui";ctx.fillText(item.graphic?.name||"Lower Third",x+22,y+55);ctx.fillStyle="#b9c4d2";ctx.font="22px system-ui";ctx.fillText(item.graphic?.role||"",x+22,y+88)}
-  else if(item.kind==="text"){ctx.fillStyle="#ffffff";ctx.font="700 42px system-ui";ctx.fillText(item.text||"Text",x,y+50)}
-  ctx.restore();
-}
-async function renderCanvas(which,sceneId){
-  const ctx=ctxs[which];ctx.fillStyle="#05070a";ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
-  const s=currentScene(sceneId);if(!s)return;
-  for(const layer of s.layers)await drawLayer(ctx,layer);
-  if(which==="program"&&state.ticker){ctx.fillStyle="#0b0e13ee";ctx.fillRect(0,ctx.canvas.height-46,ctx.canvas.width,46);ctx.fillStyle="#fff";ctx.font="700 24px system-ui";ctx.fillText(state.ticker,24,ctx.canvas.height-15)}
-}
-async function render(){await renderCanvas("program",state.programScene);await renderCanvas("preview",state.previewScene);renderEmbedOverlay("program",state.programScene);renderEmbedOverlay("preview",state.previewScene);updateLabels();renderScenes();renderLayers()}
-function updateLabels(){
-  $("programLabel").textContent=sceneName(state.programScene);$("programSource").textContent=sceneName(state.programScene);
-  $("previewLabel").textContent=sceneName(state.previewScene);$("previewSource").textContent=sceneName(state.previewScene);
-  $("transitionStatus").textContent=state.transition;$("formatPill").textContent=state.format;
-  $("selectedSceneName").textContent=sceneName(state.selectedScene);$("layerCount").textContent=(selectedScene()?.layers.length||0)+" layers";
-  document.querySelector(".program-frame").style.aspectRatio=state.format.replace(":","/");
-  document.querySelector(".preview-frame").style.aspectRatio=state.format.replace(":","/");
-}
-function renderScenes(){
-  const grid=$("sceneGrid");if(!grid)return;grid.innerHTML="";
-  state.scenes.forEach(s=>{
-    const b=document.createElement("button");
-    b.className="scene"+(state.programScene===s.id?" program":"")+(state.previewScene===s.id?" preview":"")+(state.selectedScene===s.id?" selected":"");
-    b.innerHTML="<b>"+s.name+"</b><small>"+s.layers.length+" layers</small><em>"+(state.programScene===s.id?"PROGRAM":state.previewScene===s.id?"PREVIEW":"READY")+"</em>";
-    b.onclick=()=>{state.selectedScene=s.id;state.previewScene=s.id;persist();render();toast("Preview: "+s.name)};
-    grid.appendChild(b)
-  })
-}
-function renderLayers(){
-  const list=$("layerList");if(!list)return;list.innerHTML="";const s=selectedScene();if(!s)return;
-  s.layers.forEach((l,i)=>{const row=document.createElement("div");row.className="layer-row";row.innerHTML="<button class='vis'>"+(l.visible?"◉":"○")+"</button><div><b>"+layerLabel(l)+"</b><small>Layer "+(i+1)+" · "+Math.round(l.x*100)+"% x "+Math.round(l.y*100)+"%</small></div><input class='opacity' type='range' min='0' max='100' value='"+Math.round((l.opacity??1)*100)+"'><button class='up'>↑</button><button class='down'>↓</button><button class='remove'>×</button>";
-    row.querySelector(".vis").onclick=()=>{l.visible=!l.visible;render()};
-    row.querySelector(".opacity").oninput=e=>{l.opacity=Number(e.target.value)/100;render()};
-    row.querySelector(".up").onclick=()=>{if(i>0){[s.layers[i-1],s.layers[i]]=[s.layers[i],s.layers[i-1]];render()}};
-    row.querySelector(".down").onclick=()=>{if(i<s.layers.length-1){[s.layers[i+1],s.layers[i]]=[s.layers[i],s.layers[i+1]];render()}};
-    row.querySelector(".remove").onclick=()=>{s.layers=s.layers.filter(x=>x.id!==l.id);render()};
-    list.appendChild(row)
-  })
-}
-function layerLabel(l){const m={camera1:"Camera 1",camera2:"Camera 2",screen:"Screen",media:"Media",image:"Image",text:"Text"};return m[l.source]||l.source}
-async function addLayer(source){
-  const s=selectedScene();if(!s)return;
-  if(["camera1","camera2","screen"].includes(source))await ensureLayerSource(source);
-  if(source==="media"){const item=state.mediaItems.at(-1);if(!item)return toast("Add a video to the media library first");source=item.id}
-  if(source==="image"){const item=[...state.sources.values()].find(x=>x.kind==="image");if(!item)return toast("Choose an image first");source=item.id}
-  if(source==="text"){s.layers.push({id:"layer-"+Date.now(),source:"text",text:"LIVE",x:.05,y:.08,w:.4,h:.12,opacity:1,visible:true});render();return}
-  const n=s.layers.length;s.layers.push({id:"layer-"+Date.now(),source,x:n%2?.55:0,y:n>1?.55:0,w:.45,h:.45,opacity:1,visible:true});render()
-}
-
-async function previewScene(id){state.previewScene=id;state.selectedScene=id;await render()}
-async function take(fade=false){if(state.previewScene===state.programScene)return toast("Preview is already on Program");state.programScene=state.previewScene;state.transition=fade?"FADE":"CUT";await render();if(fade)$("programFrame").animate([{opacity:1},{opacity:.15},{opacity:1}],{duration:450})}
-async function swap(){[state.programScene,state.previewScene]=[state.previewScene,state.programScene];await render();toast("Program and Preview swapped")}
-function addMedia(){
-  const url=$("mediaUrl").value.trim();if(!url)return toast("Paste a URL first");
-  const provider=providerFromUrl(url);if(provider==="invalid")return toast("Enter a valid URL");
-  const id="media-"+Date.now(),item={id,name:(provider==="direct"?"Media ":"")+(state.mediaItems.length+1),kind:provider==="direct"?"media":"embed",provider,url};
-  if(provider!=="direct"&&!embedUrl(item))return toast("This link format is not supported");
-  state.mediaItems.push(item);state.sources.set(id,item);
-  const s=selectedScene();
-  if(s){
-    s.layers.push({id:"layer-"+Date.now(),source:id,x:0,y:0,w:1,h:1,opacity:1,visible:true});
-    state.previewScene=s.id;
-    state.selectedScene=s.id;
-  }
-  renderMediaList();
-  persist();
-  toast(provider==="direct"?"Media added to Preview":"Embedded "+providerLabel(item)+" added to Preview");
-  render()
-}
-function addImage(url){if(!url)return toast("Choose an image first");const id="image-"+Date.now(),item={id,name:"Image",kind:"image",url};state.sources.set(id,item);state.selectedScene=state.previewScene;state.sources.set("image",item);render();toast("Image added")}
-function addGraphic(){const g={name:$("lowerName").value.trim()||"Our Production Studio",role:$("lowerRole").value.trim()||"Live",color:$("lowerColor").value};const item={id:"graphic",name:"Lower Third",kind:"graphic",graphic:g};state.sources.set("graphic",item);selectedScene().layers.push({id:"layer-"+Date.now(),source:"graphic",x:.04,y:.75,w:.7,h:.18,opacity:1,visible:true});render();toast("Lower third added to selected scene")}
-function addTicker(){state.ticker=$("tickerText").value.trim();render();toast(state.ticker?"Ticker added":"Ticker removed")}
-function renderMediaList(){const list=$("mediaList");list.innerHTML="";state.mediaItems.forEach(item=>{const row=document.createElement("div");row.className="media-item";row.innerHTML="<span class='media-name'>"+item.name+"</span><span class='media-kind'>"+providerLabel(item).toUpperCase()+"</span><button class='prev'>Preview</button><button class='play'>▶</button><button class='del'>×</button>";row.querySelector(".prev").onclick=()=>{state.sources.set(item.id,item);selectedScene().layers.push({id:"layer-"+Date.now(),source:item.id,x:0,y:0,w:1,h:1,opacity:1,visible:true});state.previewScene=state.selectedScene;render()};row.querySelector(".play").onclick=()=>{if(isEmbed(item)){const f=makeEmbed(item);f?.contentWindow?.postMessage(JSON.stringify({event:"command",func:"playVideo",args:[]}),"*");}else{const v=ensureMediaElement(item);v.play().catch(()=>toast("Playback was blocked or the URL is not playable"));}};row.querySelector(".del").onclick=()=>{state.mediaItems=state.mediaItems.filter(x=>x.id!==item.id);state.sources.delete(item.id);renderMediaList();render()};list.appendChild(row)})}
-function renderEmbedOverlay(which,sceneId){
-  const frame=$(which==="program"?"programFrame":"previewFrame");
-  const iframe=$(which==="program"?"programEmbed":"previewEmbed");
-  const scene=currentScene(sceneId);
-  const layer=scene?.layers.find(l=>{const x=state.sources.get(l.source);return l.visible&&x?.kind==="embed"});
-  if(!layer){iframe.hidden=true;iframe.removeAttribute("src");return}
-  const item=state.sources.get(layer.source);const src=embedUrl(item);if(!src){iframe.hidden=true;return}
-  if(iframe.src!==src)iframe.src=src;
-  iframe.hidden=false;
-  iframe.style.left=(layer.x*100)+"%";iframe.style.top=(layer.y*100)+"%";
-  iframe.style.width=(layer.w*100)+"%";iframe.style.height=(layer.h*100)+"%";
-  iframe.style.opacity=layer.opacity??1;
-  iframe.style.zIndex="10";
-}
-function currentPreviewMedia(){const s=currentScene(state.previewScene);const l=s?.layers.find(x=>x.source.startsWith("media-"));const item=l?state.sources.get(l.source):null;return item||null}
-function controlPreviewMedia(action){const item=currentPreviewMedia();if(!item)return toast("Select a media layer first");if(item.kind==="embed"){const f=makeEmbed(item);const func=action==="play"?"playVideo":action==="pause"?"pauseVideo":"stopVideo";f?.contentWindow?.postMessage(JSON.stringify({event:"command",func,args:[]}),"*");return}const v=ensureMediaElement(item);if(action==="play")v.play().catch(()=>toast("Playback blocked or URL invalid"));if(action==="pause")v.pause();if(action==="stop"){v.pause();v.currentTime=0}}
-function programRecordStream(){return canvases.program.captureStream(30)}
-function record(){
-  if(state.recording){state.recorder.stop();return}
-  const stream=programRecordStream();const mime=["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"].find(x=>MediaRecorder.isTypeSupported(x));try{state.chunks=[];state.recorder=new MediaRecorder(stream,mime?{mimeType:mime}:undefined);state.recorder.ondataavailable=e=>e.data.size&&state.chunks.push(e.data);state.recorder.onstop=()=>{const blob=new Blob(state.chunks,{type:state.recorder.mimeType||"video/webm"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="our-production-studio-program.webm";a.click();state.recording=false;$("recordBtn").textContent="● Record";toast("Program recording saved")};state.recorder.start(1000);state.recording=true;$("recordBtn").textContent="■ Stop";toast("Program recording started")}catch(e){toast("Recording is not supported in this browser")}}
-function persist(){try{localStorage.setItem("ops-studio-scenes",JSON.stringify(state.scenes));localStorage.setItem("ops-studio-format",state.format)}catch{}}
-function restore(){try{const s=JSON.parse(localStorage.getItem("ops-studio-scenes")||"null");if(Array.isArray(s)&&s.length)state.scenes=s;state.format=localStorage.getItem("ops-studio-format")||"16:9"}catch{}}
-
-$("takeBtn").onclick=()=>take(false);$("fadeBtn").onclick=()=>take(true);$("swapBtn").onclick=swap;$("recordBtn").onclick=record;
-$("goLiveBtn").onclick=()=>{state.live=!state.live;$("goLiveBtn").textContent=state.live?"END LIVE":"GO LIVE";$("streamState").textContent=state.live?"Production active":"Offline";$("connectionDot").classList.toggle("good",state.live);$("connectionText").textContent=state.live?"Production active":"Ready";toast(state.live?"Production session started":"Production session ended")};
-$("addSceneBtn").onclick=()=>{const title=prompt("Scene name","New Scene");if(!title)return;const id="scene-"+Date.now();state.scenes.push({id,name:title,layers:[]});state.selectedScene=id;state.previewScene=id;persist();render()};
-document.querySelectorAll("[data-add-layer]").forEach(b=>b.onclick=()=>addLayer(b.dataset.addLayer));
-$("cameraBtn").onclick=()=>addLayer("camera1");$("screenBtn").onclick=()=>addLayer("screen");$("addMediaBtn").onclick=addMedia;
-$("videoFile").onchange=e=>{const f=e.target.files[0];if(!f)return;const id="media-"+Date.now(),item={id,name:f.name,kind:"media",url:URL.createObjectURL(f)};state.mediaItems.push(item);state.sources.set(id,item);renderMediaList();selectedScene().layers.push({id:"layer-"+Date.now(),source:id,x:0,y:0,w:1,h:1,opacity:1,visible:true});render();toast("Local video added to selected scene")};
-$("addImageBtn").onclick=()=>$("imageFile").click();$("imageFile").onchange=e=>{const f=e.target.files[0];if(f)addImage(URL.createObjectURL(f))};
-$("addGraphicBtn").onclick=addGraphic;$("tickerBtn").onclick=addTicker;
-$("formatSelect").onchange=e=>{state.format=e.target.value;setFormatCanvas();persist()};
-$("playPauseBtn").onclick=()=>{const item=currentPreviewMedia();if(!item)return toast("Select a media layer first");if(item.kind==="embed"){controlPreviewMedia("play")}else{const v=ensureMediaElement(item);if(v.paused)v.play().catch(()=>toast("Playback blocked or URL invalid"));else v.pause()}};
-$("stopMediaBtn").onclick=()=>controlPreviewMedia("stop");$("restartMediaBtn").onclick=()=>controlPreviewMedia("play");$("mediaVolume").oninput=e=>{const item=currentPreviewMedia();if(item?.kind==="media")ensureMediaElement(item).volume=Number(e.target.value)/100};
-document.querySelectorAll("[data-mute]").forEach(b=>b.onclick=()=>{b.classList.toggle("muted");b.textContent=b.classList.contains("muted")?"U":"M"});
-document.querySelectorAll(".source-card[data-source]").forEach(b=>b.onclick=async()=>{
-  const source=b.dataset.source;
-  if(source==="camera1"||source==="camera2"||source==="screen")await addLayer(source);
-  else if(source==="media")$("mediaUrl").focus();
-  else if(source==="image")$("addImageBtn").click();
-  else if(source==="graphic")$("lowerName").focus();
-});
-setInterval(()=>{renderCanvas("program",state.programScene);renderCanvas("preview",state.previewScene)},1000/30);
-setInterval(()=>{const n=new Date();$("programClock").textContent=[n.getHours(),n.getMinutes(),n.getSeconds()].map(x=>String(x).padStart(2,"0")).join(":")},1000);
-restore();$("formatSelect").value=state.format;setFormatCanvas();renderMediaList();render();
+const state={format:"16:9",live:false,selectedScene:"scene-1",programScene:"scene-1",previewScene:"scene-2",transition:"CUT",ticker:"",mediaItems:[],sources:new Map(),scenes:[{id:"scene-1",name:"Camera 1",layers:[{id:"l1",source:"camera1",x:0,y:0,w:1,h:1,opacity:1,visible:true}]},{id:"scene-2",name:"Camera 2",layers:[{id:"l2",source:"camera2",x:0,y:0,w:1,h:1,opacity:1,visible:true}]},{id:"scene-3",name:"Interview",layers:[{id:"l3",source:"camera1",x:0,y:0,w:.68,h:1,opacity:1,visible:true},{id:"l4",source:"camera2",x:.68,y:.12,w:.32,h:.88,opacity:1,visible:true}]},{id:"scene-4",name:"Screen + Cam",layers:[{id:"l5",source:"screen",x:0,y:0,w:1,h:1,opacity:1,visible:true},{id:"l6",source:"camera1",x:.72,y:.7,w:.26,h:.26,opacity:1,visible:true}]},{id:"scene-5",name:"Media",layers:[]}]};
+const canvases={program:$('programCanvas'),preview:$('previewCanvas')},ctx={program:$('programCanvas').getContext('2d'),preview:$('previewCanvas').getContext('2d')},videos=new Map(),images=new Map();
+function toast(m){const e=$('toast');if(!e)return;e.textContent=m;e.classList.add('show');clearTimeout(window.__t);window.__t=setTimeout(()=>e.classList.remove('show'),2200)}
+function scene(id){return state.scenes.find(s=>s.id===id)}function selected(){return scene(state.selectedScene)||state.scenes[0]}function label(id){return scene(id)?.name||id}
+function provider(raw){try{const h=new URL(raw).hostname.toLowerCase().replace(/^www\./,'').replace(/^m\./,'');if(['youtube.com','youtu.be','youtube-nocookie.com'].includes(h))return'youtube';if(['vimeo.com','player.vimeo.com'].includes(h))return'vimeo';return'direct'}catch{return'invalid'}}
+function ytId(raw){try{const u=new URL(raw);if(u.hostname.includes('youtu.be'))return u.pathname.split('/').filter(Boolean)[0];if(u.pathname.includes('/shorts/'))return u.pathname.split('/shorts/')[1].split('/')[0];if(u.pathname.includes('/embed/'))return u.pathname.split('/embed/')[1].split('/')[0];return u.searchParams.get('v')}catch{return null}}
+function vmId(raw){try{return new URL(raw).pathname.match(/(?:video\/)?(\d+)/)?.[1]||null}catch{return null}}
+function embedSrc(item){if(item.provider==='youtube'){const id=ytId(item.url);return id?`https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?enablejsapi=1&playsinline=1&controls=1&rel=0&origin=${encodeURIComponent(location.origin)}`:null}if(item.provider==='vimeo'){const id=vmId(item.url);return id?`https://player.vimeo.com/video/${encodeURIComponent(id)}?autoplay=0&title=0&byline=0&portrait=0`:null}return null}
+function embedFor(which,item){const f=$(which==='program'?'programEmbed':'previewEmbed'),src=embedSrc(item);if(!f||!src)return;f.src=src;f.hidden=false;f.style.display='block';f.style.position='absolute';f.style.left='0';f.style.top='0';f.style.width='100%';f.style.height='100%';f.style.zIndex='15'}
+function hideEmbed(which){const f=$(which==='program'?'programEmbed':'previewEmbed');if(f){f.hidden=true;f.style.display='none';f.removeAttribute('src')}}
+async function capture(source){if(state.sources.has(source))return state.sources.get(source);try{const stream=source==='screen'?await navigator.mediaDevices.getDisplayMedia({video:true,audio:true}):await navigator.mediaDevices.getUserMedia({video:{facingMode:source==='camera1'?'environment':'user',width:{ideal:1920},height:{ideal:1080}},audio:true});const v=document.createElement('video');v.srcObject=stream;v.autoplay=true;v.playsInline=true;v.muted=true;await v.play().catch(()=>{});videos.set(source,v);const item={id:source,name:source==='screen'?'Screen share':source==='camera1'?'Camera 1':'Camera 2',kind:'stream',stream};state.sources.set(source,item);return item}catch(e){toast('Camera or screen permission was denied');return null}}
+function mediaVideo(item){let v=videos.get(item.id);if(v)return v;v=document.createElement('video');v.src=item.url;v.preload='auto';v.playsInline=true;v.crossOrigin='anonymous';v.onerror=()=>toast('This direct media URL is not playable by this browser');videos.set(item.id,v);return v}
+function imageEl(item){let i=images.get(item.id);if(i)return i;i=new Image();i.src=item.url;i.onload=render;images.set(item.id,i);return i}
+async function draw(which,id){const c=ctx[which],can=canvases[which];c.fillStyle='#05070a';c.fillRect(0,0,can.width,can.height);const s=scene(id);if(!s)return;let external=null;for(const l of s.layers){if(!l.visible)continue;const item=['camera1','camera2','screen'].includes(l.source)?await capture(l.source):state.sources.get(l.source);if(!item)continue;if(item.kind==='embed'){external=item;continue}const x=l.x*can.width,y=l.y*can.height,w=l.w*can.width,h=l.h*can.height;c.save();c.globalAlpha=l.opacity??1;if(item.kind==='stream'||item.kind==='media'){const v=videos.get(item.id);if(v?.readyState>=2)c.drawImage(v,x,y,w,h)}else if(item.kind==='image'){const im=imageEl(item);if(im.complete&&im.naturalWidth)c.drawImage(im,x,y,w,h)}else if(item.kind==='text'){c.fillStyle='#fff';c.font='700 42px system-ui';c.fillText(l.text||'LIVE',x,y+50)}else if(item.kind==='graphic'){c.fillStyle='#070a10e8';c.fillRect(x,y,w,h);c.fillStyle=item.graphic.color;c.fillRect(x,y,5,h);c.fillStyle='#fff';c.font='700 38px system-ui';c.fillText(item.graphic.name,x+22,y+55);c.fillStyle='#b9c4d2';c.font='22px system-ui';c.fillText(item.graphic.role,x+22,y+88)}c.restore()}if(external)embedFor(which,external);else hideEmbed(which)}
+async function render(){await draw('program',state.programScene);await draw('preview',state.previewScene);update();renderScenes();renderLayers();renderSourceSelection()}
+function update(){$('programLabel').textContent=label(state.programScene);$('programSource').textContent=label(state.programScene);$('previewLabel').textContent=label(state.previewScene);$('previewSource').textContent=label(state.previewScene);$('transitionStatus').textContent=state.transition;$('selectedSceneName').textContent=label(state.selectedScene);$('layerCount').textContent=(selected()?.layers.length||0)+' layers';$('formatPill').textContent=state.format}
+function renderScenes(){const g=$('sceneGrid');if(!g)return;g.innerHTML='';state.scenes.forEach(s=>{const b=document.createElement('button');b.className='scene '+(s.id===state.programScene?'program ':'')+(s.id===state.previewScene?'preview ':'')+(s.id===state.selectedScene?'selected':'');b.innerHTML=`<b>${s.name}</b><small>${s.layers.length} layers</small><em>${s.id===state.programScene?'PROGRAM':s.id===state.previewScene?'PREVIEW':'READY'}</em>`;b.onclick=()=>{state.selectedScene=s.id;state.previewScene=s.id;render();toast('Preview: '+s.name)};g.appendChild(b)})}
+function layerName(l){if(l.source==='camera1')return'Camera 1';if(l.source==='camera2')return'Camera 2';if(l.source==='screen')return'Screen share';if(l.source==='text')return'Text';return state.sources.get(l.source)?.name||'Media'}
+function renderLayers(){const list=$('layerList');if(!list)return;list.innerHTML='';selected().layers.forEach((l,i)=>{const r=document.createElement('div');r.className='layer-row';r.innerHTML=`<button class="vis">${l.visible?'◉':'○'}</button><div><b>${layerName(l)}</b><small>Layer ${i+1}</small></div><input class="opacity" type="range" min="0" max="100" value="${Math.round((l.opacity??1)*100)}"><button class="up">↑</button><button class="down">↓</button><button class="remove">×</button>`;r.querySelector('.vis').onclick=()=>{l.visible=!l.visible;render()};r.querySelector('.opacity').oninput=e=>{l.opacity=+e.target.value/100;render()};r.querySelector('.up').onclick=()=>{if(i){[selected().layers[i-1],selected().layers[i]]=[selected().layers[i],selected().layers[i-1]];render()}};r.querySelector('.down').onclick=()=>{if(i<selected().layers.length-1){[selected().layers[i+1],selected().layers[i]]=[selected().layers[i],selected().layers[i+1]];render()}};r.querySelector('.remove').onclick=()=>{selected().layers.splice(i,1);render()};list.appendChild(r)})}
+function renderSourceSelection(){document.querySelectorAll('.source-card').forEach(b=>b.classList.toggle('selected',b.dataset.source===selected().layers[0]?.source))}
+async function selectSource(source){if(source==='media'){ $('mediaUrl').focus();toast('Paste a URL then press Add source');return}if(source==='image'){ $('addImageBtn').click();return}if(source==='graphic'){ $('lowerName').focus();return}await capture(source);selected().layers=[{id:'layer-'+Date.now(),source,x:0,y:0,w:1,h:1,opacity:1,visible:true}];state.previewScene=state.selectedScene;render()}
+async function addLayer(source){if(source==='media'){const item=state.mediaItems.at(-1);if(!item)return toast('Add a media source first');source=item.id}else if(source==='image'){const item=[...state.sources.values()].find(x=>x.kind==='image');if(!item)return toast('Choose an image first');source=item.id}else if(source==='text'){selected().layers.push({id:'layer-'+Date.now(),source:'text',text:'LIVE',x:.05,y:.08,w:.4,h:.1,opacity:1,visible:true});return render()}else if(['camera1','camera2','screen'].includes(source))await capture(source);const n=selected().layers.length;selected().layers.push({id:'layer-'+Date.now(),source,x:n%2?.55:0,y:n>1?.55:0,w:.45,h:.45,opacity:1,visible:true});state.previewScene=state.selectedScene;render()}
+function addMedia(){const url=$('mediaUrl').value.trim();if(!url)return toast('Paste a URL first');const p=provider(url);if(p==='invalid')return toast('Invalid URL');const id='media-'+Date.now(),item={id,name:p==='youtube'?'YouTube video':p==='vimeo'?'Vimeo video':'Media '+(state.mediaItems.length+1),kind:p==='direct'?'media':'embed',provider:p,url};if(item.kind==='embed'&&!embedSrc(item))return toast('Could not identify that video');state.mediaItems.push(item);state.sources.set(id,item);selected().layers=[{id:'layer-'+Date.now(),source:id,x:0,y:0,w:1,h:1,opacity:1,visible:true}];state.previewScene=state.selectedScene;renderMediaList();render();toast('Added to Preview')}
+function addImage(url){if(!url)return toast('Choose an image first');const id='image-'+Date.now(),item={id,name:'Image',kind:'image',url};state.sources.set(id,item);selected().layers=[{id:'layer-'+Date.now(),source:id,x:0,y:0,w:1,h:1,opacity:1,visible:true}];state.previewScene=state.selectedScene;render()}
+function addGraphic(){const id='graphic-'+Date.now(),item={id,name:'Lower Third',kind:'graphic',graphic:{name:$('lowerName').value||'Our Production Studio',role:$('lowerRole').value||'Live',color:$('lowerColor').value}};state.sources.set(id,item);selected().layers.push({id:'layer-'+Date.now(),source:id,x:.04,y:.72,w:.7,h:.18,opacity:1,visible:true});render()}
+function renderMediaList(){const l=$('mediaList');if(!l)return;l.innerHTML='';state.mediaItems.forEach(item=>{const r=document.createElement('div');r.className='media-item';r.innerHTML=`<span class="media-name">${item.name}</span><span class="media-kind">${item.provider?.toUpperCase()||'VIDEO'}</span><button class="prev">Preview</button><button class="play">▶</button><button class="del">×</button>`;r.querySelector('.prev').onclick=()=>{selected().layers=[{id:'layer-'+Date.now(),source:item.id,x:0,y:0,w:1,h:1,opacity:1,visible:true}];state.previewScene=state.selectedScene;render()};r.querySelector('.play').onclick=()=>{if(item.kind==='embed'){embedFor('preview',item);$('previewEmbed').contentWindow?.postMessage(JSON.stringify({event:'command',func:'playVideo',args:[]}),'*')}else mediaVideo(item).play().catch(()=>toast('Playback blocked or URL invalid'))};r.querySelector('.del').onclick=()=>{state.mediaItems=state.mediaItems.filter(x=>x.id!==item.id);state.sources.delete(item.id);renderMediaList();render()};l.appendChild(r)})}
+function currentMedia(){const l=scene(state.previewScene)?.layers.find(x=>x.source.startsWith('media-'));return l?state.sources.get(l.source):null}
+function mediaControl(a){const item=currentMedia();if(!item)return toast('Select a media scene first');if(item.kind==='embed'){embedFor('preview',item);const f=$('previewEmbed'),func=a==='play'?'playVideo':a==='pause'?'pauseVideo':'stopVideo';f.contentWindow?.postMessage(JSON.stringify({event:'command',func,args:[]}),'*');return}const v=mediaVideo(item);if(a==='play')v.play().catch(()=>toast('Playback blocked or URL invalid'));if(a==='pause')v.pause();if(a==='stop'){v.pause();v.currentTime=0}}
+function take(fade){if(state.previewScene===state.programScene)return toast('Preview is already Program');state.programScene=state.previewScene;state.transition=fade?'FADE':'CUT';render();if(fade)$('programFrame').animate([{opacity:1},{opacity:.25},{opacity:1}],{duration:450})}
+function swap(){[state.programScene,state.previewScene]=[state.previewScene,state.programScene];state.selectedScene=state.previewScene;render()}
+$('takeBtn').onclick=()=>take(false);$('fadeBtn').onclick=()=>take(true);$('swapBtn').onclick=swap;$('addMediaBtn').onclick=addMedia;$('addImageBtn').onclick=()=>$('imageFile').click();$('imageFile').onchange=e=>{const f=e.target.files[0];if(f)addImage(URL.createObjectURL(f))};$('videoFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const id='media-'+Date.now(),item={id,name:f.name,kind:'media',url:URL.createObjectURL(f)};state.mediaItems.push(item);state.sources.set(id,item);selected().layers=[{id:'layer-'+Date.now(),source:id,x:0,y:0,w:1,h:1,opacity:1,visible:true}];state.previewScene=state.selectedScene;renderMediaList();render()};$('cameraBtn').onclick=()=>selectSource('camera1');$('screenBtn').onclick=()=>selectSource('screen');$('addGraphicBtn').onclick=addGraphic;$('tickerBtn').onclick=()=>{state.ticker=$('tickerText').value;render()};$('playPauseBtn').onclick=()=>{const i=currentMedia();if(!i)return toast('Select a media scene first');if(i.kind==='embed'){mediaControl('play')}else{const v=mediaVideo(i);v.paused?mediaControl('play'):mediaControl('pause')}};$('stopMediaBtn').onclick=()=>mediaControl('stop');$('restartMediaBtn').onclick=()=>mediaControl('play');$('mediaVolume').oninput=e=>{const i=currentMedia();if(i?.kind==='media')mediaVideo(i).volume=+e.target.value/100};$('formatSelect').onchange=e=>{state.format=e.target.value;render()};$('goLiveBtn').onclick=()=>{state.live=!state.live;$('goLiveBtn').textContent=state.live?'END LIVE':'GO LIVE';$('streamState').textContent=state.live?'Production active':'Offline';$('connectionDot').classList.toggle('good',state.live)};$('recordBtn').onclick=()=>toast('Recording will be connected to the broadcast engine next');$('addSceneBtn').onclick=()=>{const n=prompt('Scene name','New Scene');if(!n)return;const id='scene-'+Date.now();state.scenes.push({id,name:n,layers:[]});state.selectedScene=id;state.previewScene=id;render()};
+document.querySelectorAll('.source-card[data-source]').forEach(b=>b.onclick=()=>selectSource(b.dataset.source));document.querySelectorAll('[data-add-layer]').forEach(b=>b.onclick=()=>addLayer(b.dataset.add-layer));
+renderMediaList();render();setInterval(()=>{draw('program',state.programScene);draw('preview',state.previewScene)},1000/30);setInterval(()=>{const d=new Date();$('programClock').textContent=[d.getHours(),d.getMinutes(),d.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':')},1000);
