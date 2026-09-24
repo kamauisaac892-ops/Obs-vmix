@@ -95,11 +95,17 @@ function updateLabels(){
   document.querySelector(".preview-frame").style.aspectRatio=state.format.replace(":","/");
 }
 function renderScenes(){
-  const grid=$("sceneGrid");grid.innerHTML="";
-  state.scenes.forEach(s=>{const b=document.createElement("button");b.className="scene"+(state.programScene===s.id?" program":"")+(state.previewScene===s.id?" preview":"")+(state.selectedScene===s.id?" selected":"");b.innerHTML="<b>"+s.name+"</b><small>"+s.layers.length+" layers</small>";b.onclick=()=>{state.selectedScene=s.id;state.previewScene=s.id;render()};grid.appendChild(b)})
+  const grid=$("sceneGrid");if(!grid)return;grid.innerHTML="";
+  state.scenes.forEach(s=>{
+    const b=document.createElement("button");
+    b.className="scene"+(state.programScene===s.id?" program":"")+(state.previewScene===s.id?" preview":"")+(state.selectedScene===s.id?" selected":"");
+    b.innerHTML="<b>"+s.name+"</b><small>"+s.layers.length+" layers</small><em>"+(state.programScene===s.id?"PROGRAM":state.previewScene===s.id?"PREVIEW":"READY")+"</em>";
+    b.onclick=()=>{state.selectedScene=s.id;state.previewScene=s.id;persist();render();toast("Preview: "+s.name)};
+    grid.appendChild(b)
+  })
 }
 function renderLayers(){
-  const list=$("layerList");list.innerHTML="";const s=selectedScene();if(!s)return;
+  const list=$("layerList");if(!list)return;list.innerHTML="";const s=selectedScene();if(!s)return;
   s.layers.forEach((l,i)=>{const row=document.createElement("div");row.className="layer-row";row.innerHTML="<button class='vis'>"+(l.visible?"◉":"○")+"</button><div><b>"+layerLabel(l)+"</b><small>Layer "+(i+1)+" · "+Math.round(l.x*100)+"% x "+Math.round(l.y*100)+"%</small></div><input class='opacity' type='range' min='0' max='100' value='"+Math.round((l.opacity??1)*100)+"'><button class='up'>↑</button><button class='down'>↓</button><button class='remove'>×</button>";
     row.querySelector(".vis").onclick=()=>{l.visible=!l.visible;render()};
     row.querySelector(".opacity").oninput=e=>{l.opacity=Number(e.target.value)/100;render()};
@@ -168,6 +174,13 @@ $("formatSelect").onchange=e=>{state.format=e.target.value;setFormatCanvas();per
 $("playPauseBtn").onclick=()=>{const item=currentPreviewMedia();if(!item)return toast("Select a media layer first");if(item.kind==="embed"){controlPreviewMedia("play")}else{const v=ensureMediaElement(item);if(v.paused)v.play().catch(()=>toast("Playback blocked or URL invalid"));else v.pause()}};
 $("stopMediaBtn").onclick=()=>controlPreviewMedia("stop");$("restartMediaBtn").onclick=()=>controlPreviewMedia("play");$("mediaVolume").oninput=e=>{const item=currentPreviewMedia();if(item?.kind==="media")ensureMediaElement(item).volume=Number(e.target.value)/100};
 document.querySelectorAll("[data-mute]").forEach(b=>b.onclick=()=>{b.classList.toggle("muted");b.textContent=b.classList.contains("muted")?"U":"M"});
+document.querySelectorAll(".source-card[data-source]").forEach(b=>b.onclick=async()=>{
+  const source=b.dataset.source;
+  if(source==="camera1"||source==="camera2"||source==="screen")await addLayer(source);
+  else if(source==="media")$("mediaUrl").focus();
+  else if(source==="image")$("addImageBtn").click();
+  else if(source==="graphic")$("lowerName").focus();
+});
 setInterval(()=>{renderCanvas("program",state.programScene);renderCanvas("preview",state.previewScene)},1000/30);
 setInterval(()=>{const n=new Date();$("programClock").textContent=[n.getHours(),n.getMinutes(),n.getSeconds()].map(x=>String(x).padStart(2,"0")).join(":")},1000);
 restore();$("formatSelect").value=state.format;setFormatCanvas();renderMediaList();render();
