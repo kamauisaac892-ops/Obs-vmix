@@ -53,6 +53,13 @@
   <section class="controls">
     <div class="section-title">SCENES</div>
     <div class="scene-grid" id="sceneGrid"></div>
+    <div class="scene-editor">
+      <div class="editor-head"><b>SCENE EDITOR</b><span id="selectedSceneName">Camera 1</span><span id="layerCount">1 layers</span></div>
+      <div class="layer-toolbar">
+        <button data-add-layer="camera1">+ Camera 1</button><button data-add-layer="camera2">+ Camera 2</button><button data-add-layer="screen">+ Screen</button><button data-add-layer="media">+ Media</button><button data-add-layer="image">+ Image</button><button data-add-layer="text">+ Text</button>
+      </div>
+      <div id="layerList" class="layer-list"></div>
+    </div>
     <div class="take-row"><button id="takeBtn" class="take">TAKE</button><button id="fadeBtn" class="fade">FADE</button><button id="swapBtn" class="secondary">SWAP</button><button id="addSceneBtn" class="secondary">+ Scene</button></div>
   </section>
 
@@ -61,7 +68,7 @@
     <div class="tool-grid">
       <div class="tool-card"><b>🎥 Camera</b><span>Use front/rear camera and microphone.</span><button id="cameraBtn">Start camera</button></div>
       <div class="tool-card"><b>🖥 Screen share</b><span>Share a tab, window or full display.</span><button id="screenBtn">Share screen</button></div>
-      <div class="tool-card"><b>🔗 Video / media URL</b><span>Paste a direct MP4/WebM video URL. It becomes a media scene.</span><div class="inline"><input id="mediaUrl" placeholder="Paste YouTube, Vimeo, MP4, HLS/M3U8 or other media URL"><button id="addMediaBtn">Add source</button></div><div id="mediaHint" class="media-hint">Supports direct browser media plus YouTube/Vimeo embeds.</div><label class="file-btn">Add local video<input id="videoFile" type="file" accept="video/*"></label></div>
+      <div class="tool-card"><b>🔗 Video / media URL</b><span>Paste a YouTube, Vimeo, MP4/WebM, HLS/M3U8 or other browser-playable media URL.</span><div class="inline"><input id="mediaUrl" placeholder="Paste YouTube, Vimeo, MP4, HLS/M3U8 or other media URL"><button id="addMediaBtn">Add source</button></div><div id="mediaHint" class="media-hint">Supports direct browser media plus YouTube/Vimeo embeds.</div><label class="file-btn">Add local video<input id="videoFile" type="file" accept="video/*"></label></div>
       <div class="tool-card"><b>🖼 Image</b><span>Load a remote image or choose a local file.</span><div class="inline"><input id="imageUrl" placeholder="https://example.com/logo.png"><button id="addImageBtn">Choose image</button></div><label class="file-btn">Choose image file<input id="imageFile" type="file" accept="image/*"></label></div>
       <div class="tool-card"><b>🏷 Lower third</b><span>Create broadcast names, titles and captions.</span><div class="form-grid"><input id="lowerName" placeholder="Name"><input id="lowerRole" placeholder="Title / role"><input id="lowerColor" type="color" value="#16c784"><button id="addGraphicBtn">Create graphic</button></div></div>
       <div class="tool-card"><b>📜 Ticker</b><span>Scrolling text for the program output.</span><div class="inline"><input id="tickerText" placeholder="Breaking news • Your message"><button id="tickerBtn">Add ticker</button></div></div>
